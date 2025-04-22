@@ -1,0 +1,277 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Das Chatbot</title>
+  <style>
+    :root {
+      --bg-color: #e5ddd5;
+      --chat-bg: #fff;
+      --user-bg: #dcf8c6;
+      --bot-bg: #f1f0f0;
+      --text-color: black;
+    }
+    [data-theme="dark"] {
+      --bg-color: #121212;
+      --chat-bg: #1e1e1e;
+      --user-bg: #054640;
+      --bot-bg: #2a2a2a;
+      --text-color: #f0f0f0;
+    }
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: var(--bg-color);
+      color: var(--text-color);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      margin: 0;
+      height: 100vh;
+      padding: 0;
+      transition: 0.3s;
+    }
+    h1 {
+      margin: 20px;
+      color: var(--text-color);
+    }
+    #controls {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+    button.control {
+      padding: 8px 16px;
+      border-radius: 20px;
+      border: none;
+      cursor: pointer;
+      background: #075e54;
+      color: white;
+      font-size: 14px;
+    }
+    #chatbox {
+      background: var(--chat-bg);
+      width: 100%;
+      max-width: 600px;
+      height: 65vh;
+      padding: 15px;
+      overflow-y: scroll;
+      box-shadow: 0 0 10px rgba(0,0,0,0.2);
+      border-radius: 10px;
+      margin-bottom: 10px;
+      display: flex;
+      flex-direction: column;
+      transition: 0.3s;
+    }
+    .message {
+      margin: 8px 0;
+      max-width: 70%;
+      padding: 10px 15px;
+      border-radius: 20px;
+      word-wrap: break-word;
+      line-height: 1.4;
+      position: relative;
+    }
+    .user {
+      align-self: flex-end;
+      background: var(--user-bg);
+    }
+    .bot {
+      align-self: flex-start;
+      background: var(--bot-bg);
+    }
+    .timestamp {
+      font-size: 10px;
+      color: gray;
+      position: absolute;
+      bottom: -15px;
+      right: 10px;
+    }
+    #inputArea {
+      width: 100%;
+      max-width: 600px;
+      display: flex;
+      margin-bottom: 20px;
+      gap: 10px;
+    }
+    #messageInput {
+      flex: 1;
+      padding: 12px 15px;
+      border: none;
+      border-radius: 30px;
+      font-size: 16px;
+    }
+    #sendButton, #micButton {
+      background: #25d366;
+      color: white;
+      border: none;
+      padding: 0 20px;
+      border-radius: 30px;
+      font-size: 16px;
+      cursor: pointer;
+    }
+    #sendButton:hover, #micButton:hover {
+      background: #128c7e;
+    }
+    @keyframes blink {
+      0% { content: ''; }
+      33% { content: '.'; }
+      66% { content: '..'; }
+      100% { content: '...'; }
+    }
+    .typing::after {
+      content: '';
+      animation: blink 1s steps(3, end) infinite;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>Das Chat</h1>
+
+  <div id="controls">
+    <button id="themeToggle" class="control">🌙 Toggle Theme</button>
+    <button id="downloadChat" class="control">📥 Download Chat</button>
+  </div>
+
+  <div id="chatbox"></div>
+
+  <div id="inputArea">
+    <input type="text" id="messageInput" placeholder="Type a message..." autofocus />
+    <button id="micButton">🎤</button>
+    <button id="sendButton">Send</button>
+  </div>
+
+  <script>
+    const API_KEY = "AIzaSyCxAv6rQmEHRQDW26-2-A75FkmTUsw4b-I";
+    const BOT_NAME = "Das";
+
+    const chatbox = document.getElementById('chatbox');
+    const messageInput = document.getElementById('messageInput');
+    const sendButton = document.getElementById('sendButton');
+    const micButton = document.getElementById('micButton');
+    const themeToggle = document.getElementById('themeToggle');
+    const downloadChat = document.getElementById('downloadChat');
+
+    themeToggle.addEventListener('click', () => {
+      document.body.dataset.theme = document.body.dataset.theme === 'dark' ? '' : 'dark';
+    });
+
+    downloadChat.addEventListener('click', () => {
+      const history = JSON.parse(localStorage.getItem('chatHistory') || '[]');
+      const text = history.map(m => `[${m.time}] ${m.sender.toUpperCase()}: ${m.text}`).join('\n');
+      const blob = new Blob([text], { type: 'text/plain' });
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = 'chat_history.txt';
+      link.click();
+    });
+
+    sendButton.addEventListener('click', sendMessage);
+    messageInput.addEventListener('keypress', function(e) {
+      if (e.key === 'Enter') sendMessage();
+    });
+
+    micButton.addEventListener('click', () => {
+      if (!('webkitSpeechRecognition' in window)) {
+        alert("Speech recognition not supported.");
+        return;
+      }
+      const recognition = new webkitSpeechRecognition();
+      recognition.lang = "en-US";
+      recognition.start();
+      recognition.onresult = (event) => {
+        messageInput.value = event.results[0][0].transcript;
+      };
+    });
+
+    function getCurrentTime() {
+      const now = new Date();
+      return now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    }
+
+    function addMessage(sender, text, time = null, isTyping = false) {
+      const messageDiv = document.createElement('div');
+      messageDiv.classList.add('message', sender);
+      if (isTyping) {
+        messageDiv.classList.add('typing');
+      }
+      messageDiv.innerText = text;
+
+      const timestamp = document.createElement('div');
+      timestamp.classList.add('timestamp');
+      timestamp.innerText = time || getCurrentTime();
+      messageDiv.appendChild(timestamp);
+
+      chatbox.appendChild(messageDiv);
+      chatbox.scrollTop = chatbox.scrollHeight;
+
+      return messageDiv;
+    }
+
+    function saveChat() {
+      const messages = [];
+      document.querySelectorAll('.message').forEach(div => {
+        const sender = div.classList.contains('user') ? 'user' : 'bot';
+        const text = div.firstChild.textContent;
+        const time = div.querySelector('.timestamp').innerText;
+        messages.push({ sender, text, time });
+      });
+      localStorage.setItem('chatHistory', JSON.stringify(messages));
+    }
+
+    function loadChat() {
+      const history = JSON.parse(localStorage.getItem('chatHistory') || '[]');
+      history.forEach(msg => {
+        addMessage(msg.sender, msg.text, msg.time);
+      });
+    }
+
+    async function sendMessage() {
+      const userMessage = messageInput.value.trim();
+      if (!userMessage) return;
+
+      addMessage('user', userMessage);
+      saveChat();
+      messageInput.value = '';
+      sendButton.disabled = true;
+
+      const typingMessageDiv = addMessage('bot', `${BOT_NAME} is typing...`, null, true);
+
+      try {
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${API_KEY}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: userMessage }] }]
+          })
+        });
+
+        const data = await response.json();
+        const botText = data.candidates?.[0]?.content?.parts?.[0]?.text || "Sorry, I couldn't understand.";
+
+        typingMessageDiv.classList.remove('typing');
+        typingMessageDiv.innerText = `${BOT_NAME}: ${botText}`;
+
+        const timestamp = document.createElement('div');
+        timestamp.classList.add('timestamp');
+        timestamp.innerText = getCurrentTime();
+        typingMessageDiv.appendChild(timestamp);
+
+        saveChat();
+
+      } catch (error) {
+        console.error(error);
+        typingMessageDiv.classList.remove('typing');
+        typingMessageDiv.innerText = "Error connecting to AI.";
+      } finally {
+        sendButton.disabled = false;
+        messageInput.focus();
+      }
+    }
+
+    window.onload = loadChat;
+  </script>
+
+</body>
+</html>
